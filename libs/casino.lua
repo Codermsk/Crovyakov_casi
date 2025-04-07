@@ -6,6 +6,7 @@ local filesystem = require("filesystem")
 local storage
 local io = require("io")
 local serialization = require("serialization")
+local sides = require("sides")
 local CURRENCY = {
     name = nil,
     max = nil,
@@ -15,7 +16,6 @@ local CURRENCY = {
 }
 
 local currentBetSize = 0
-
 
 casino.container = nil
 local containerSize = 0
@@ -32,6 +32,22 @@ elseif settings.PAYMENT_METHOD == 'CRYSTAL' then
     casino.container = component.crystal
     containerSize = casino.container.getInventorySize()
     storage = component.diamond
+elseif settings.PAYMENT_METHOD == 'TRANSPOSER' then
+    casino.container = component.transposer
+    containerSize = casino.container.getInventorySize(sides.down) -- Инвентарь игрока снизу
+    storage = {
+        exportItem = function(item, side, amount)
+            -- Перемещаем деньги из системы (верх) к игроку (низ)
+            return casino.container.transferItem(sides.up, sides.down, amount, 1, 1)
+        end,
+        getItemDetail = function(item)
+            local stack = casino.container.getStackInSlot(sides.up, 1)
+            if stack and stack.name == item.id and stack.damage == item.dmg then
+                return {basic = function() return {qty = stack.size} end}
+            end
+            return nil
+        end
+    }
 elseif settings.PAYMENT_METHOD == 'DEV' then
     casino.container = {exportItem = function () return true end, getStackInSlot = function() end}
     containerSize = math.huge
@@ -66,6 +82,18 @@ if settings.PAYMENT_METHOD == 'CRYSTAL' then
             end
         end
     end
+elseif settings.PAYMENT_METHOD == 'TRANSPOSER' then
+    casino.reward = function(money)
+        if not CURRENCY.id then
+            return true
+        end
+    
+        money = math.floor(money + 0.5)
+        if money > 0 then
+            -- Перемещаем деньги из системы (верх) к игроку (низ)
+            casino.container.transferItem(sides.up, sides.down, money, 1, 1)
+        end
+    end
 else
     casino.reward = function(money)
         if not CURRENCY.id or settings.PAYMENT_METHOD == 'DEV' then
@@ -82,29 +110,60 @@ else
     end
 end
 
+if settings.PAYMENT_METHOD == 'TRANSPOSER' then
+    casino.takeMoney = function(money)
+        if not CURRENCY.id then
+            return true
+        end
 
-casino.takeMoney = function(money)
-    if not CURRENCY.id or settings.PAYMENT_METHOD == 'DEV' then
+        if CURRENCY.max and currentBetSize + money > CURRENCY.max then
+            return false, "Превышен максимум"
+        end
+
+        local sum = 0
+        -- Проверяем все слоты инвентаря игрока (нижняя сторона)
+        for slot = 1, casino.container.getInventorySize(sides.down) do
+            local stack = casino.container.getStackInSlot(sides.down, slot)
+            if stack and stack.name == CURRENCY.id and stack.damage == CURRENCY.dmg then
+                -- Перемещаем деньги от игрока (низ) в систему (верх)
+                sum = sum + casino.container.transferItem(sides.down, sides.up, money - sum, slot, 1)
+                if sum >= money then break end
+            end
+        end
+        
+        if sum < money then
+            -- Возвращаем собранные деньги, если не хватило
+            casino.container.transferItem(sides.up, sides.down, sum, 1, 1)
+            return false, "Нужно " .. CURRENCY.name .. " x" .. money
+        end
+        
+        currentBetSize = currentBetSize + money
         return true
     end
-
-    if CURRENCY.max and currentBetSize + money > CURRENCY.max then
-        return false, "Превышен максимум"
-    end
-
-    local sum = 0
-    for i = 1, containerSize do
-        local item = casino.container.getStackInSlot(i)
-        if item and not item.nbt_hash and item.id == CURRENCY.id and item.dmg == CURRENCY.dmg and item.dmg == CURRENCY.dmg then
-            sum = sum + casino.container.pushItem(settings.CONTAINER_PAY, i, money - sum)
+else
+    casino.takeMoney = function(money)
+        if not CURRENCY.id or settings.PAYMENT_METHOD == 'DEV' then
+            return true
         end
+
+        if CURRENCY.max and currentBetSize + money > CURRENCY.max then
+            return false, "Превышен максимум"
+        end
+
+        local sum = 0
+        for i = 1, containerSize do
+            local item = casino.container.getStackInSlot(i)
+            if item and not item.nbt_hash and item.id == CURRENCY.id and item.dmg == CURRENCY.dmg and item.dmg == CURRENCY.dmg then
+                sum = sum + casino.container.pushItem(settings.CONTAINER_PAY, i, money - sum)
+            end
+        end
+        if sum < money then
+            casino.reward(sum)
+            return false, "Нужно " .. CURRENCY.name .. " x" .. money
+        end
+        currentBetSize = currentBetSize + money
+        return true
     end
-    if sum < money then
-        casino.reward(sum)
-        return false, "Нужно " .. CURRENCY.name .. " x" .. money
-    end
-    currentBetSize = currentBetSize + money
-    return true
 end
 
 casino.rewardManually = function(player, id, dmg, count)
@@ -172,6 +231,17 @@ if settings.PAYMENT_METHOD == 'CRYSTAL' then
             end
         end
         return qty or 0
+    end
+elseif settings.PAYMENT_METHOD == 'TRANSPOSER' then
+    casino.getCurrencyInStorage = function(currency)
+        if not currency.id then
+            return -1
+        end
+        local stack = casino.container.getStackInSlot(sides.up, 1)
+        if stack and stack.name == currency.id and stack.damage == currency.dmg then
+            return stack.size
+        end
+        return 0
     end
 elseif settings.PAYMENT_METHOD == 'DEV' then
     casino.getCurrencyInStorage = function(currency)
