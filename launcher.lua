@@ -293,72 +293,18 @@ local function handlePim()
 end
 
 local function initLauncher()
-    -- Проверка и создание необходимых директорий
-    local requiredDirs = {
-        "/lib/FormatModules",
-        "/home/images",
-        "/home/images/games_logo",
-        "/home/images/currencies",
-        "/home/apps"
-    }
-    
-    for _, dir in ipairs(requiredDirs) do
-        if not filesystem.exists(dir) then
-            local ok, err = shell.execute("md " .. dir)
-            if not ok then
-                print("Ошибка создания директории "..dir..": "..tostring(err))
-                return false
-            end
-        end
+    for i = 1, #requiredDirectories do
+        shell.execute("md " .. requiredDirectories[i])
     end
-
-    -- Загрузка необходимых библиотек
-    local libsToLoad = {
-        {url = REPOSITORY.."/lib/casino.lua", path = "/lib/casino.lua"},
-        {url = REPOSITORY.."/lib/games.lua", path = "/lib/games.lua"},
-        {url = REPOSITORY.."/lib/currencies.lua", path = "/lib/currencies.lua"},
-        {url = REPOSITORY.."/lib/image.lua", path = "/lib/image.lua"},
-        {url = REPOSITORY.."/lib/doubleBuffering.lua", path = "/lib/doubleBuffering.lua"},
-        {url = REPOSITORY.."/lib/color.lua", path = "/lib/color.lua"}
-    }
-
-    for _, lib in ipairs(libsToLoad) do
-        local ok, err = pcall(casino.downloadFile, lib.url, lib.path)
-        if not ok then
-            print("Ошибка загрузки "..lib.path..": "..tostring(err))
-            return false
-        end
+    for i = 1, #libs do
+        casino.downloadFile(libs[i].url, libs[i].path)
     end
-
-    -- Загрузка модулей с обработкой ошибок
-    local function safeRequire(mod)
-        local ok, res = pcall(require, mod)
-        if not ok then
-            print("Ошибка загрузки модуля "..mod..": "..res)
-            return nil
-        end
-        return res
-    end
-
-    games = safeRequire("games")
-    currencies = safeRequire("currencies")
-    image = safeRequire("image")
-    buffer = safeRequire("doubleBuffering")
-    colorlib = safeRequire("color")
-
-    if not (games and currencies and image and buffer and colorlib) then
-        return false
-    end
-
-    -- Установка валюты по умолчанию
-    if #currencies > 0 then
-        casino.setCurrency(currencies[1])
-    else
-        print("Ошибка: Нет доступных валют!")
-        return false
-    end
-
-    return true
+    games = require("games")
+    currencies = require("currencies")
+    image = require("image")
+    buffer = require("doubleBuffering")
+    colorlib = require("color")
+    casino.setCurrency(currencies[1])
 end
 
 initLauncher()
