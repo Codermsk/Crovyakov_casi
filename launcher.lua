@@ -32,6 +32,37 @@ local state = {
     currencyDropdown = false
 }
 
+-- Инициализация transposer если используется этот метод оплаты
+if settings.PAYMENT_METHOD == 'TRANSPOSER' then
+    local component = require("component")
+    local sides = require("sides")
+    
+    -- Проверяем наличие компонента transposer
+    if not component.isAvailable("transposer") then
+        error("Для работы требуется компонент transposer")
+    end
+    
+    -- Настройки сторон transposer
+    local PLAYER_SIDE = sides.up  -- Сторона игрока (обычно нижняя)
+    local SYSTEM_SIDE = sides.down    -- Сторона системы (обычно верхняя)
+    
+    -- Функция для проверки подключения игрока
+    local function check_player_present()
+        return casino.container.getInventorySize(PLAYER_SIDE) > 0
+    end
+    
+    -- Функция для проверки баланса игрока
+    local function check_player_balance(currency)
+        local balance = 0
+        for slot = 1, casino.container.getInventorySize(PLAYER_SIDE) do
+            local stack = casino.container.getStackInSlot(PLAYER_SIDE, slot)
+            if stack and stack.name == currency.id and stack.damage == currency.dmg then
+                balance = balance + stack.size
+            end
+        end
+        return balance
+    end
+end
 
 local requiredDirectories = { "/lib/FormatModules", "/home/images/", "/home/images/games_logo", "/home/images/currencies", "/home/apps" }
 
