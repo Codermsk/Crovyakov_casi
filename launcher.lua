@@ -292,18 +292,50 @@ local function handlePim()
 end
 
 local function initLauncher()
+    -- Создание директорий с проверкой
     for i = 1, #requiredDirectories do
-        shell.execute("md " .. requiredDirectories[i])
+        if not filesystem.exists(requiredDirectories[i]) then
+            local success, err = shell.execute("md " .. requiredDirectories[i])
+            if not success then
+                print("Ошибка создания директории "..requiredDirectories[i]..": "..tostring(err))
+            end
+        end
     end
+
+    -- Загрузка библиотек с обработкой ошибок
     for i = 1, #libs do
-        casino.downloadFile(libs[i].url, libs[i].path)
+        print("Загрузка "..libs[i].path)
+        local success, err = pcall(casino.downloadFile, libs[i].url, libs[i].path)
+        if not success then
+            print("Ошибка загрузки "..libs[i].path..": "..tostring(err))
+        end
     end
-    games = require("games")
-    currencies = require("currencies")
-    image = require("image")
-    buffer = require("doubleBuffering")
-    colorlib = require("color")
-    casino.setCurrency(currencies[1])
+
+    -- Защищённая загрузка модулей
+    local function safeRequire(name)
+        local success, result = pcall(require, name)
+        if not success then
+            print("ОШИБКА: Не удалось загрузить модуль "..name)
+            print("Детали: "..result)
+            print("Проверьте наличие файла /lib/"..name..".lua")
+            os.exit()
+        end
+        return result
+    end
+
+    games = safeRequire("games")
+    currencies = safeRequire("currencies")
+    image = safeRequire("image")
+    buffer = safeRequire("doubleBuffering")
+    colorlib = safeRequire("color")
+
+    -- Инициализация валюты
+    if #currencies > 0 then
+        casino.setCurrency(currencies[1])
+    else
+        print("ОШИБКА: Нет доступных валют в currencies.lua")
+        os.exit()
+    end
 end
 
 initLauncher()
