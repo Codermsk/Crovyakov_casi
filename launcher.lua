@@ -4,13 +4,14 @@ local shell = require("shell")
 local unicode = require("unicode")
 local settings = require("settings")
 local computer = require('computer')
-local games
-local currencies
-local image
-local buffer
-local colorlib
+local component = require("component")
+local sides = require("sides")
+local filesystem = require("filesystem")
 
-REPOSITORY = settings.REPOSITORY
+-- Инициализация глобальных переменных
+local games, currencies, image, buffer, colorlib
+
+REPOSITORY = "https://raw.githubusercontent.com/Codermsk/Crovyakov_casi/master"
 
 CURRENT_APP = nil
 SHOULD_INTERRUPT = false
@@ -292,35 +293,51 @@ local function handlePim()
 end
 
 local function initLauncher()
-    -- Создание директорий с проверкой
-    for i = 1, #requiredDirectories do
-        if not filesystem.exists(requiredDirectories[i]) then
-            local success, err = shell.execute("md " .. requiredDirectories[i])
-            if not success then
-                print("Ошибка создания директории "..requiredDirectories[i]..": "..tostring(err))
+    -- Проверка и создание необходимых директорий
+    local requiredDirs = {
+        "/lib/FormatModules",
+        "/home/images",
+        "/home/images/games_logo",
+        "/home/images/currencies",
+        "/home/apps"
+    }
+    
+    for _, dir in ipairs(requiredDirs) do
+        if not filesystem.exists(dir) then
+            local ok, err = shell.execute("md " .. dir)
+            if not ok then
+                print("Ошибка создания директории "..dir..": "..tostring(err))
+                return false
             end
         end
     end
 
-    -- Загрузка библиотек с обработкой ошибок
-    for i = 1, #libs do
-        print("Загрузка "..libs[i].path)
-        local success, err = pcall(casino.downloadFile, libs[i].url, libs[i].path)
-        if not success then
-            print("Ошибка загрузки "..libs[i].path..": "..tostring(err))
+    -- Загрузка необходимых библиотек
+    local libsToLoad = {
+        {url = REPOSITORY.."/lib/casino.lua", path = "/lib/casino.lua"},
+        {url = REPOSITORY.."/lib/games.lua", path = "/lib/games.lua"},
+        {url = REPOSITORY.."/lib/currencies.lua", path = "/lib/currencies.lua"},
+        {url = REPOSITORY.."/lib/image.lua", path = "/lib/image.lua"},
+        {url = REPOSITORY.."/lib/doubleBuffering.lua", path = "/lib/doubleBuffering.lua"},
+        {url = REPOSITORY.."/lib/color.lua", path = "/lib/color.lua"}
+    }
+
+    for _, lib in ipairs(libsToLoad) do
+        local ok, err = pcall(casino.downloadFile, lib.url, lib.path)
+        if not ok then
+            print("Ошибка загрузки "..lib.path..": "..tostring(err))
+            return false
         end
     end
 
-    -- Защищённая загрузка модулей
-    local function safeRequire(name)
-        local success, result = pcall(require, name)
-        if not success then
-            print("ОШИБКА: Не удалось загрузить модуль "..name)
-            print("Детали: "..result)
-            print("Проверьте наличие файла /lib/"..name..".lua")
-            os.exit()
+    -- Загрузка модулей с обработкой ошибок
+    local function safeRequire(mod)
+        local ok, res = pcall(require, mod)
+        if not ok then
+            print("Ошибка загрузки модуля "..mod..": "..res)
+            return nil
         end
-        return result
+        return res
     end
 
     games = safeRequire("games")
@@ -329,13 +346,19 @@ local function initLauncher()
     buffer = safeRequire("doubleBuffering")
     colorlib = safeRequire("color")
 
-    -- Инициализация валюты
+    if not (games and currencies and image and buffer and colorlib) then
+        return false
+    end
+
+    -- Установка валюты по умолчанию
     if #currencies > 0 then
         casino.setCurrency(currencies[1])
     else
-        print("ОШИБКА: Нет доступных валют в currencies.lua")
-        os.exit()
+        print("Ошибка: Нет доступных валют!")
+        return false
     end
+
+    return true
 end
 
 initLauncher()
