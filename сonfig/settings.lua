@@ -1,6 +1,6 @@
 local settings = {}
 
-settings.REPOSITORY = "https://github.com/Codermsk/Crovyakov_casi/tree/master"
+settings.REPOSITORY = "https://raw.githubusercontent.com/Codermsk/Crovyakov_casi/master"
 settings.TITLE = "Приветствуем вас в нашем казино"
 settings.ADMINS = { "CoderMS"}
 
